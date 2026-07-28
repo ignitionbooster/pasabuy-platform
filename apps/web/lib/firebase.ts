@@ -1,5 +1,5 @@
-import { initializeApp, getApps } from "firebase/app";
-import { getAuth } from "firebase/auth";
+import { initializeApp, getApps, type FirebaseApp } from "firebase/app";
+import { getAuth, type Auth } from "firebase/auth";
 import { getMessaging, isSupported } from "firebase/messaging";
 
 const firebaseConfig = {
@@ -11,15 +11,27 @@ const firebaseConfig = {
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
 };
 
-export const firebaseApp = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
+let cachedApp: FirebaseApp | null = null;
+function getFirebaseApp(): FirebaseApp {
+  if (!cachedApp) cachedApp = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
+  return cachedApp;
+}
 
-// getAuth() must never run during Next.js's server-side static prerendering —
-// there's no real browser there, and Firebase Auth throws immediately on
-// init in that environment regardless of whether the API key looks valid.
-// Only ever call this from client-side code (useEffect, event handlers).
-export const auth = typeof window !== "undefined" ? getAuth(firebaseApp) : ({} as ReturnType<typeof getAuth>);
+let cachedAuth: Auth | null = null;
+
+// Lazy + never called at module scope, so a missing/placeholder API key
+// throws only when a caller actually invokes this (inside a try/catch in a
+// useEffect), instead of crashing the whole page the instant the bundle
+// loads — which is what happened when this used to run eagerly at import time.
+export function getFirebaseAuth(): Auth {
+  if (typeof window === "undefined") {
+    throw new Error("getFirebaseAuth() must only be called in the browser");
+  }
+  if (!cachedAuth) cachedAuth = getAuth(getFirebaseApp());
+  return cachedAuth;
+}
 
 export async function getMessagingIfSupported() {
   if (typeof window === "undefined") return null;
-  return (await isSupported()) ? getMessaging(firebaseApp) : null;
+  return (await isSupported()) ? getMessaging(getFirebaseApp()) : null;
 }
