@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import dynamic from "next/dynamic";
 import { signInAnonymously, onAuthStateChanged } from "firebase/auth";
-import { auth } from "@/lib/firebase";
+import { getFirebaseAuth } from "@/lib/firebase";
 import { api, setAccessToken } from "@/lib/api";
 import { getSocket, joinRideRoom } from "@/lib/socket";
 import type { LatLng } from "@/components/MapView";
@@ -23,15 +23,26 @@ export default function RiderPage() {
 
   // 1. Firebase Auth -> exchange for our own short-lived API JWT.
   useEffect(() => {
+    let auth;
+    try {
+      auth = getFirebaseAuth();
+    } catch (err) {
+      console.error("Firebase Auth unavailable (check your Firebase env vars):", err);
+      return;
+    }
     const unsub = onAuthStateChanged(auth, async (user) => {
-      if (!user) {
-        await signInAnonymously(auth); // swap for phone/Google sign-in in production
-        return;
+      try {
+        if (!user) {
+          await signInAnonymously(auth); // swap for phone/Google sign-in in production
+          return;
+        }
+        const idToken = await user.getIdToken();
+        const { accessToken } = await api.loginWithFirebase(idToken);
+        setAccessToken(accessToken);
+        setReady(true);
+      } catch (err) {
+        console.error("Firebase/API login failed:", err);
       }
-      const idToken = await user.getIdToken();
-      const { accessToken } = await api.loginWithFirebase(idToken);
-      setAccessToken(accessToken);
-      setReady(true);
     });
     return () => unsub();
   }, []);
