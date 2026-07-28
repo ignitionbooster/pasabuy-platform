@@ -12,7 +12,12 @@ const firebaseConfig = {
 };
 
 export const firebaseApp = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
-export const auth = getAuth(firebaseApp);
+
+// getAuth() must never run during Next.js's server-side static prerendering —
+// there's no real browser there, and Firebase Auth throws immediately on
+// init in that environment regardless of whether the API key looks valid.
+// Only ever call this from client-side code (useEffect, event handlers).
+export const auth = typeof window !== "undefined" ? getAuth(firebaseApp) : ({} as ReturnType<typeof getAuth>);
 
 export async function getMessagingIfSupported() {
   if (typeof window === "undefined") return null;
