@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef } from "react";
 import dynamic from "next/dynamic";
 import { signInAnonymously, onAuthStateChanged } from "firebase/auth";
-import { auth } from "@/lib/firebase";
+import { getFirebaseAuth } from "@/lib/firebase";
 import { api, setAccessToken } from "@/lib/api";
 import { getSocket, sendDriverLocation } from "@/lib/socket";
 import type { LatLng } from "@/components/MapView";
@@ -21,12 +21,23 @@ export default function DriverPage() {
   const driverProfileId = useRef<string>("demo-driver-profile-id"); // comes from /users/me in production
 
   useEffect(() => {
+    let auth;
+    try {
+      auth = getFirebaseAuth();
+    } catch (err) {
+      console.error("Firebase Auth unavailable (check your Firebase env vars):", err);
+      return;
+    }
     const unsub = onAuthStateChanged(auth, async (user) => {
-      if (!user) { await signInAnonymously(auth); return; }
-      const idToken = await user.getIdToken();
-      const { accessToken } = await api.loginWithFirebase(idToken);
-      setAccessToken(accessToken);
-      setReady(true);
+      try {
+        if (!user) { await signInAnonymously(auth); return; }
+        const idToken = await user.getIdToken();
+        const { accessToken } = await api.loginWithFirebase(idToken);
+        setAccessToken(accessToken);
+        setReady(true);
+      } catch (err) {
+        console.error("Firebase/API login failed:", err);
+      }
     });
     return () => unsub();
   }, []);
