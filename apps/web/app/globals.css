@@ -1,0 +1,11 @@
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; font-family: 'Inter', system-ui, sans-serif; background: #F7F5EF; color: #1A1F1B; }
+button { font-family: inherit; cursor: pointer; border: none; }
+:root {
+  --color-primary: #0B3D2E;
+  --color-accent: #C6F135;
+  --color-coral: #FF6B5B;
+  --color-bg: #F7F5EF;
+  --color-card: #FFFFFF;
+  --color-muted: #8A9188;
+}

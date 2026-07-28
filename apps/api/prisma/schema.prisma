@@ -1,0 +1,148 @@
+// Sakay — Prisma schema (PostgreSQL + PostGIS)
+// Run `npx prisma db execute --file prisma/enable-postgis.sql` once before the first migrate,
+// since Prisma can't enable extensions itself.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  RIDER
+  DRIVER
+  ADMIN
+}
+
+enum RideStatus {
+  REQUESTED
+  MATCHING
+  ACCEPTED
+  DRIVER_EN_ROUTE
+  ARRIVED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum VehicleType {
+  BIKE
+  CAR
+  PLUS
+  XL
+}
+
+enum PaymentProvider {
+  CASH
+  GCASH
+  PAYMONGO
+  STRIPE
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  FAILED
+  REFUNDED
+}
+
+model User {
+  id           String   @id @default(uuid())
+  firebaseUid  String   @unique
+  email        String?  @unique
+  phone        String?  @unique
+  displayName  String?
+  avatarUrl    String?
+  role         UserRole @default(RIDER)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  driverProfile DriverProfile?
+  ridesAsRider  Ride[]          @relation("RiderRides")
+  paymentMethods PaymentMethod[]
+}
+
+model DriverProfile {
+  id             String      @id @default(uuid())
+  user           User        @relation(fields: [userId], references: [id])
+  userId         String      @unique
+  vehicleType    VehicleType
+  plateNumber    String
+  vehicleModel   String
+  vehicleColor   String
+  rating         Float       @default(5.0)
+  totalTrips     Int         @default(0)
+  isOnline       Boolean     @default(false)
+  isVerified     Boolean     @default(false)
+  // PostGIS geography point — Prisma has no native type, hence Unsupported()
+  currentLocation Unsupported("geography(Point,4326)")?
+  lastLocationAt DateTime?
+  createdAt      DateTime    @default(now())
+
+  ridesAsDriver  Ride[]      @relation("DriverRides")
+
+  @@index([isOnline])
+}
+
+model Ride {
+  id               String     @id @default(uuid())
+  rider            User       @relation("RiderRides", fields: [riderId], references: [id])
+  riderId          String
+  driver           DriverProfile? @relation("DriverRides", fields: [driverId], references: [id])
+  driverId         String?
+
+  status           RideStatus @default(REQUESTED)
+  vehicleType      VehicleType
+
+  pickupLabel      String
+  pickupLocation   Unsupported("geography(Point,4326)")
+  dropoffLabel     String
+  dropoffLocation  Unsupported("geography(Point,4326)")
+
+  distanceKm       Float?
+  durationMin      Float?
+  fareAmount       Decimal?   @db.Decimal(10, 2)
+  currency         String     @default("PHP")
+
+  requestedAt      DateTime   @default(now())
+  acceptedAt       DateTime?
+  startedAt        DateTime?
+  completedAt      DateTime?
+  cancelledAt      DateTime?
+  cancelReason     String?
+
+  payment          Payment?
+  ratingByRider    Int?
+  tipAmount        Decimal?   @db.Decimal(10, 2)
+
+  @@index([status])
+  @@index([riderId])
+  @@index([driverId])
+}
+
+model Payment {
+  id          String          @id @default(uuid())
+  ride        Ride            @relation(fields: [rideId], references: [id])
+  rideId      String          @unique
+  provider    PaymentProvider
+  status      PaymentStatus   @default(PENDING)
+  amount      Decimal         @db.Decimal(10, 2)
+  currency    String          @default("PHP")
+  providerRef String?         // e.g. PayMongo payment_intent id, Stripe PI id, GCash source id
+  paidAt      DateTime?
+  createdAt   DateTime        @default(now())
+}
+
+model PaymentMethod {
+  id          String          @id @default(uuid())
+  user        User            @relation(fields: [userId], references: [id])
+  userId      String
+  provider    PaymentProvider
+  label       String          // e.g. "GCash •••• 4821"
+  providerRef String          // tokenized reference, never raw card/account data
+  isDefault   Boolean         @default(false)
+  createdAt   DateTime        @default(now())
+}
